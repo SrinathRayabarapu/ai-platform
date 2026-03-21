@@ -2,17 +2,16 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  # Spring Boot apps running on the developer machine (MacBook via Tailscale).
-  # The DEV_MACHINE_IP is set in .env — update it when you change dev machines.
+  # Spring Boot actuator metrics. Targets come from file_sd so you can change
+  # the dev machine (Tailscale IP vs same-host) without editing this file —
+  # run: ./scripts/render-prometheus-config.sh (called automatically from bootstrap).
   - job_name: 'ai-services'
     metrics_path: '/actuator/prometheus'
-    static_configs:
-      - targets: ['host.docker.internal:8081']
-        labels:
-          env: 'ai-lab'
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/file_sd/ai-services.json
+        refresh_interval: 15s
 
-  # Host-level metrics (CPU, RAM, disk, network) via node-exporter.
-  # Uses Docker DNS — no external port needed.
   - job_name: 'node-exporter'
     static_configs:
       - targets: ['node-exporter:9100']
@@ -20,8 +19,6 @@ scrape_configs:
           env: 'ai-lab'
           instance: 'ai-lab-host'
 
-  # Per-container metrics (CPU, memory, network per container) via cAdvisor.
-  # Uses Docker DNS — no external port needed.
   - job_name: 'cadvisor'
     static_configs:
       - targets: ['cadvisor:8080']

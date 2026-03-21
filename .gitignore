@@ -4,8 +4,10 @@ data/
 # Environment config (contains passwords)
 .env
 
-# Logs
+# Logs (bootstrap, local debugging)
 *.log
+logs/
+backups/
 
 # IDE
 .idea/

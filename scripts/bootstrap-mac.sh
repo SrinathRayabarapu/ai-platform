@@ -6,15 +6,27 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=scripts/lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-ok()   { echo -e "${GREEN}[OK]${NC}    $1"; }
-warn() { echo -e "${YELLOW}[WARN]${NC}  $1"; }
-fail() { echo -e "${RED}[FAIL]${NC}  $1"; exit 1; }
+ok()   { echo -e "${GREEN}[OK]${NC}    $1"; ai_platform_log "OK: $1"; }
+warn() { echo -e "${YELLOW}[WARN]${NC}  $1"; ai_platform_log "WARN: $1"; }
+fail() { echo -e "${RED}[FAIL]${NC}  $1"; ai_platform_log "FAIL: $1"; exit 1; }
+
+LOG_DIR="$(ai_platform_log_dir "$PROJECT_DIR")"
+export AI_PLATFORM_LOG_FILE="${AI_PLATFORM_LOG_FILE:-$LOG_DIR/bootstrap-$(date +%Y%m%d_%H%M%S).log}"
+touch "$AI_PLATFORM_LOG_FILE"
+ai_platform_log "bootstrap-mac.sh start PROJECT_DIR=$PROJECT_DIR"
+
+if ai_platform_debug_on; then
+    set -x
+    ok "AI_PLATFORM_DEBUG=1 — shell tracing enabled; full log: $AI_PLATFORM_LOG_FILE"
+fi
 
 echo ""
 echo "=== Step 1: Verify Docker Desktop ==="
@@ -62,9 +74,6 @@ for dir in "${DATA_DIRS[@]}"; do
     mkdir -p "$PROJECT_DIR/data/$dir"
 done
 ok "Data directories created under $PROJECT_DIR/data/"
-
-# macOS Docker Desktop runs containers in a Linux VM; UID mapping is handled
-# automatically. No chown/chmod needed (unlike bare Linux/WSL2).
 ok "Permissions: Docker Desktop handles UID mapping automatically"
 
 echo ""
@@ -72,21 +81,31 @@ echo "=== Step 4: Environment File ==="
 
 if [ ! -f "$PROJECT_DIR/.env" ]; then
     cp "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.env"
-    warn ".env created from .env.example — review and edit passwords before production use"
+    warn ".env created from .env.example — review passwords and scrape/Kafka host settings"
 else
     ok ".env already exists"
 fi
 
 echo ""
-echo "=== Step 5: Start Platform ==="
+echo "=== Step 5: Render Prometheus scrape target (file_sd) ==="
+"$SCRIPT_DIR/render-prometheus-config.sh" 2>&1 | tee -a "$AI_PLATFORM_LOG_FILE"
+
+echo ""
+echo "=== Step 6: Start Platform ==="
 
 cd "$PROJECT_DIR"
-docker compose up -d
+if ! docker compose up -d 2>&1 | tee -a "$AI_PLATFORM_LOG_FILE"; then
+    fail "docker compose up -d failed — see: $AI_PLATFORM_LOG_FILE and run: docker compose ps -a && docker compose logs"
+fi
 
 echo ""
 echo "============================================="
 echo "  AI Platform is starting!"
 echo "============================================="
 echo ""
+echo "  Session log: $AI_PLATFORM_LOG_FILE"
 echo "  Run './scripts/status.sh' to check health."
+echo "  If something fails: see docs/DEBUGGING.md"
 echo ""
+
+ai_platform_log "bootstrap-mac.sh finished successfully"
