@@ -1,6 +1,6 @@
 # AI Platform
 
-Production-grade portable AI platform — **deployment as code**.
+Production-grade portable AI platform as **Infrastructure as Code (IaC)** — versioned Docker Compose, configs, and scripts you can reproduce on any machine.
 
 A fully reproducible Docker Compose stack for AI experimentation with PostgreSQL/pgvector, Kafka, Redis, Prometheus, Grafana, and management UIs. Clone the repo, edit one config file, run one script — the entire platform starts.
 
