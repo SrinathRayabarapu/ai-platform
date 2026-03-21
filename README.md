@@ -1,0 +1,336 @@
+# AI Platform
+
+Production-grade portable AI platform — **deployment as code**.
+
+A fully reproducible Docker Compose stack for AI experimentation with PostgreSQL/pgvector, Kafka, Redis, Prometheus, Grafana, and management UIs. Clone the repo, edit one config file, run one script — the entire platform starts.
+
+## Quick Start
+
+```bash
+git clone https://github.com/SrinathRayabarapu/ai-platform.git
+cd ai-platform
+cp .env.example .env
+# Edit .env — set your passwords and Tailscale IPs
+./scripts/bootstrap.sh
+```
+
+After bootstrap completes, run `./scripts/status.sh` to verify all services are healthy.
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────┐
+│      Developer Machine (MacBook / Laptop)    │
+│                                              │
+│   Cursor IDE + Java 21 + Maven + Git         │
+│   Ollama (LLM inference)                     │
+│   Spring Boot apps (run/debug locally)       │
+│   Browser → AI Platform Web UIs              │
+│   Tailscale client                           │
+└──────────────┬───────────────────────────────┘
+               │  Tailscale mesh VPN
+               │  (or localhost if same machine)
+┌──────────────┴───────────────────────────────┐
+│      AI Platform Host (Dell / VM / Cloud)    │
+│      Docker Compose — 10 core containers     │
+│                                              │
+│  ┌─ Data ──────────────────────────────────┐ │
+│  │ PostgreSQL 16 + pgvector    :5432       │ │
+│  │ Apache Kafka (KRaft)        :9092/:9094 │ │
+│  │ Redis 7                     :6379       │ │
+│  └─────────────────────────────────────────┘ │
+│  ┌─ Observability ─────────────────────────┐ │
+│  │ Prometheus                  :9090       │ │
+│  │ Grafana                     :3000       │ │
+│  │ node-exporter               internal    │ │
+│  │ cAdvisor                    internal    │ │
+│  └─────────────────────────────────────────┘ │
+│  ┌─ Management UIs ───────────────────────┐  │
+│  │ Kafka UI                    :8080      │  │
+│  │ pgAdmin4                    :5050      │  │
+│  │ RedisInsight                :5540      │  │
+│  └────────────────────────────────────────┘  │
+└──────────────────────────────────────────────┘
+```
+
+## Hardware Requirements
+
+| Tier | CPU | RAM | Disk | Notes |
+|------|-----|-----|------|-------|
+| **Minimum** | 4 cores | 8 GB | 40 GB SSD | Tight — some services may be slow |
+| **Recommended** | 4+ cores | 16 GB | 100 GB SSD | Current Dell AI Lab setup |
+| **Ideal** | 8+ cores | 32 GB | 200 GB SSD | Room for extended profile + K3s |
+
+## Service URLs
+
+After bootstrap, access these from your browser (replace `<HOST>` with localhost or your Tailscale IP):
+
+| Service | URL | Default Credentials | Purpose |
+|---------|-----|---------------------|---------|
+| **Grafana** | http://\<HOST\>:3000 | admin / admin1234 | Dashboards: host health, container metrics, AI metrics |
+| **Kafka UI** | http://\<HOST\>:8080 | — (no auth) | Browse topics, view messages, monitor consumer groups |
+| **Prometheus** | http://\<HOST\>:9090 | — (no auth) | Raw PromQL queries, target health |
+| **pgAdmin4** | http://\<HOST\>:5050 | admin@ailab.dev / admin | PostgreSQL: browse tables, run SQL, view pgvector indexes |
+| **RedisInsight** | http://\<HOST\>:5540 | — (no auth) | Redis: browse keys, monitor memory, run commands |
+
+TCP services (connect from Spring Boot apps):
+
+| Service | Connection | Example |
+|---------|-----------|---------|
+| **PostgreSQL** | `jdbc:postgresql://<HOST>:5432/ai_lab` | User: `ai_user` / Password: `ai_pass` |
+| **Kafka** | `<HOST>:9094` (external listener) | Bootstrap servers for Spring Kafka |
+| **Redis** | `<HOST>:6379` | Spring Data Redis host |
+
+## Project Structure
+
+```
+ai-platform/
+├── docker-compose.yml                  # All services (core + extended profiles)
+├── .env.example                        # Configuration template
+├── .gitignore
+├── README.md
+│
+├── scripts/
+│   ├── bootstrap.sh                    # OS-aware entrypoint
+│   ├── bootstrap-linux.sh              # Linux / WSL2 setup
+│   ├── bootstrap-mac.sh                # macOS setup
+│   ├── bootstrap-windows.ps1           # Windows (PowerShell) setup
+│   ├── stop.sh                         # Stop containers (preserve data)
+│   ├── reset.sh                        # Full reset (destroy all data)
+│   ├── status.sh                       # Health check + resource usage
+│   ├── migrate-export.sh               # Export data for migration
+│   └── migrate-import.sh               # Import data on new machine
+│
+├── config/
+│   ├── prometheus/
+│   │   └── prometheus.yml              # Scrape configuration
+│   └── grafana/
+│       ├── provisioning/
+│       │   ├── datasources/
+│       │   │   └── prometheus.yml      # Auto-provisions Prometheus datasource
+│       │   └── dashboards/
+│       │       └── dashboards.yml      # Auto-loads dashboard JSONs
+│       └── dashboards/
+│           └── ai-lab-overview.json    # Pre-built overview dashboard
+│
+└── data/                               # .gitignored — created by bootstrap
+    ├── postgres/
+    ├── kafka/
+    ├── redis/
+    ├── prometheus/
+    ├── grafana/
+    ├── pgadmin/
+    └── redisinsight/
+```
+
+## Configuration
+
+All configuration is driven by the `.env` file. Copy the example and edit:
+
+```bash
+cp .env.example .env
+```
+
+Key variables to review:
+
+| Variable | Default | When to Change |
+|----------|---------|----------------|
+| `COMPOSE_PROJECT_NAME` | `ai-lab` | If running multiple instances |
+| `AI_LAB_HOST` | `100.73.219.57` | Set to this machine's Tailscale IP |
+| `DEV_MACHINE_IP` | `100.111.29.42` | Set to your dev laptop's Tailscale IP |
+| `GF_ADMIN_PASSWORD` | `admin1234` | Change for security |
+| `POSTGRES_PASSWORD` | `ai_pass` | Change for security |
+| `KAFKA_RETENTION_HOURS` | `24` | Increase if you need longer topic retention |
+| `PROMETHEUS_RETENTION_TIME` | `7d` | Increase if you need longer metric history |
+
+## Platform Operations
+
+### Start
+
+```bash
+./scripts/bootstrap.sh        # First time (creates dirs, sets permissions, starts)
+docker compose up -d           # Subsequent starts (if dirs already exist)
+```
+
+### Stop (preserve data)
+
+```bash
+./scripts/stop.sh
+```
+
+### Health check
+
+```bash
+./scripts/status.sh
+```
+
+### Full reset (destroy all data)
+
+```bash
+./scripts/reset.sh
+```
+
+## Extended Profile
+
+Five additional services are defined but disabled by default. They require 32 GB RAM for comfortable headroom alongside the core 10 containers.
+
+| Service | Purpose | RAM |
+|---------|---------|-----|
+| **MinIO** | S3-compatible object storage (model artifacts, datasets) | ~512 MB |
+| **Loki** | Log aggregation (centralized container logs) | ~512 MB |
+| **Promtail** | Log collector (ships Docker logs to Loki) | ~128 MB |
+| **Portainer** | Docker management UI | ~256 MB |
+| **Traefik** | Reverse proxy with TLS | ~128 MB |
+
+To activate:
+
+```bash
+# Uncomment extended variables in .env
+docker compose --profile extended up -d
+```
+
+## Migration Guide
+
+Moving the AI platform from Machine A to Machine B.
+
+### On Machine A (source)
+
+```bash
+# 1. Export all data
+./scripts/migrate-export.sh
+
+# 2. Copy the backup directory to Machine B
+scp -r backups/export_YYYYMMDD_HHMMSS user@machine-b:~/
+```
+
+### On Machine B (target)
+
+```bash
+# 1. Clone and bootstrap (empty)
+git clone https://github.com/SrinathRayabarapu/ai-platform.git
+cd ai-platform
+cp .env.example .env
+# Edit .env (update IPs, passwords)
+./scripts/bootstrap.sh
+
+# 2. Import data from backup
+./scripts/migrate-import.sh ~/export_YYYYMMDD_HHMMSS
+
+# 3. Verify
+./scripts/status.sh
+```
+
+### What gets migrated
+
+| Data | Method | Notes |
+|------|--------|-------|
+| **PostgreSQL** | `pg_dumpall` / `psql` restore | Full database dump including roles |
+| **Redis** | RDB snapshot copy | Point-in-time snapshot |
+| **Grafana dashboards** | API export/import JSON | Custom dashboards preserved; provisioned ones auto-load |
+| **Kafka** | Not migrated | Dev lab topics are ephemeral; topic config is in compose |
+| **Prometheus metrics** | Not migrated | Historical metrics are not critical for a dev lab |
+| **.env** | Manual copy + diff | Review and update IPs/passwords for new machine |
+
+## OS-Specific Notes
+
+### WSL2 (Windows)
+
+- Run `scripts/bootstrap-windows.ps1` from **PowerShell (Admin)** on the Windows host.
+- The script configures `netsh interface portproxy` rules so services are accessible via Tailscale from other machines.
+- node-exporter uses `/proc` and `/sys` mounts instead of `/:ro,rslave` because WSL2 does not support `rslave` mount propagation.
+- WSL2's virtual disk (`ext4.vhdx`) grows as Docker writes data but does **not shrink automatically**. To reclaim space: `wsl --shutdown` then `Optimize-VHD` in PowerShell.
+- The `df /` command inside WSL shows the virtual disk size (up to ~1 TB), not the physical SSD. Use `Get-Volume C` in PowerShell for actual SSD usage.
+
+### macOS
+
+- Requires Docker Desktop. The bootstrap script checks for it.
+- Docker Desktop handles UID mapping automatically — no `chown`/`chmod` needed for Grafana, pgAdmin, Prometheus data dirs.
+
+### Linux
+
+- Requires Docker Engine + Docker Compose v2.
+- The bootstrap script runs `sudo chown`/`chmod` for container UID requirements.
+
+## Troubleshooting
+
+### pgAdmin4 won't start (email validation error)
+
+pgAdmin rejects `.local` TLD in `PGADMIN_DEFAULT_EMAIL`. Use `.dev` or any valid public TLD:
+
+```
+PGADMIN_EMAIL=admin@ailab.dev    # works
+PGADMIN_EMAIL=admin@ailab.local  # rejected
+```
+
+### cAdvisor / Node Exporter dashboard shows "No data" in Grafana
+
+Community dashboards (IDs 1860, 14282) use placeholder datasource variables (`${DS_PROMETHEUS}`) that aren't resolved on import. Fix: edit each panel/variable and set the datasource to "Prometheus" (the auto-provisioned source). The bundled `ai-lab-overview.json` dashboard avoids this issue entirely.
+
+### Grafana password reset
+
+If you change the password via UI and forget it:
+
+```bash
+docker compose exec grafana grafana cli admin reset-admin-password <new-password>
+```
+
+### Kafka UI shows no clusters
+
+Kafka takes 20-30 seconds to initialize. Wait and refresh. If persistent, check `docker compose logs kafka`.
+
+### Containers restarting (OOM)
+
+Check `docker stats --no-stream`. If a container exceeds its memory limit, either increase the limit in `.env` or reduce workload. The `status.sh` script shows per-container RAM usage.
+
+## Grafana Dashboards
+
+The platform ships with one pre-built dashboard that auto-loads on first boot:
+
+**AI Lab Overview** — single-page view with:
+- Host gauges: CPU %, RAM %, Disk %, Load Average (5m)
+- Host time-series: CPU and Memory over time
+- Container bar gauges: CPU and Memory per container (sorted)
+- Container time-series: CPU, Memory, and Network I/O over time
+
+For deeper analysis, import community dashboards from Grafana.com:
+
+| Dashboard | ID | Purpose |
+|-----------|----|---------|
+| Node Exporter Full | `1860` | Detailed host metrics (16 collapsible rows) |
+| Docker Container & Host Metrics | `14282` | Per-container deep dive |
+
+When importing, select the **Prometheus** datasource (auto-provisioned as `ai-lab-prometheus`).
+
+## Storage Budget (256 GB SSD reference)
+
+| Component | Size | Notes |
+|-----------|------|-------|
+| OS (Windows/Linux) | ~5-30 GB | WSL2 + Ubuntu ~5 GB; Windows slimmed ~30 GB |
+| Docker images | ~17 GB | All 10 containers |
+| Docker volumes (data) | ~20 GB | PostgreSQL, Kafka logs, Redis, Grafana |
+| Ollama models (if used) | ~5 GB | Headroom for small models |
+| **Total** | **~50-80 GB** | |
+
+Storage-conscious settings baked into compose:
+- Kafka: 24-hour log retention, 1 GB max per partition
+- Redis: 512 MB max memory with LRU eviction
+- Prometheus: 7-day retention, 1 GB max TSDB size
+- Memory limits on all containers
+
+## Weekly Maintenance
+
+```bash
+# Check health
+./scripts/status.sh
+
+# Prune Docker (dangling images, build cache)
+docker system prune -f
+
+# Check disk usage
+docker system df
+du -sh data/*
+```
+
+## License
+
+MIT

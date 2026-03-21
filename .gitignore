@@ -1,0 +1,20 @@
+# Data volumes (created by bootstrap script)
+data/
+
+# Environment config (contains passwords)
+.env
+
+# Logs
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
