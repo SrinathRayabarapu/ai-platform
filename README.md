@@ -47,7 +47,6 @@ After bootstrap completes, run `./scripts/status.sh` to verify all services are 
 │  └─────────────────────────────────────────┘ │
 │  ┌─ Management UIs ───────────────────────┐  │
 │  │ Kafka UI                    :8080      │  │
-│  │ pgAdmin4                    :5050      │  │
 │  │ RedisInsight                :5540      │  │
 │  └────────────────────────────────────────┘  │
 └──────────────────────────────────────────────┘
@@ -70,8 +69,9 @@ After bootstrap, access these from your browser (replace `<HOST>` with localhost
 | **Grafana** | http://\<HOST\>:3000 | admin / admin1234 | Dashboards: host health, container metrics, AI metrics |
 | **Kafka UI** | http://\<HOST\>:8080 | — (no auth) | Browse topics, view messages, monitor consumer groups |
 | **Prometheus** | http://\<HOST\>:9090 | — (no auth) | Raw PromQL queries, target health |
-| **pgAdmin4** | http://\<HOST\>:5050 | admin@ailab.dev / admin | PostgreSQL: browse tables, run SQL, view pgvector indexes |
 | **RedisInsight** | http://\<HOST\>:5540 | — (no auth) | Redis: browse keys, monitor memory, run commands |
+
+> **PostgreSQL client:** Use [DBeaver Community](https://dbeaver.io/download/) on your Mac instead of pgAdmin4 — it connects directly to `<HOST>:5432`, supports 80+ databases, and frees ~512 MB of Dell RAM. pgAdmin4 is available as an extended-profile service if needed.
 
 TCP services (connect from Spring Boot apps):
 
@@ -129,8 +129,8 @@ ai-platform/
     ├── redis/
     ├── prometheus/
     ├── grafana/
-    ├── pgadmin/
-    └── redisinsight/
+    ├── redisinsight/
+    └── pgadmin/              # only created with --profile extended
 ```
 
 ## Configuration
@@ -198,10 +198,11 @@ docker compose up -d
 
 ## Extended Profile
 
-Five additional services are defined but disabled by default. They require 32 GB RAM for comfortable headroom alongside the core 10 containers.
+Six additional services are defined but disabled by default. They require 32 GB RAM for comfortable headroom alongside the core 9 containers.
 
 | Service | Purpose | RAM |
 |---------|---------|-----|
+| **pgAdmin4** | PostgreSQL web UI (use DBeaver on Mac for day-to-day; pgAdmin available here if needed) | ~512 MB |
 | **MinIO** | S3-compatible object storage (model artifacts, datasets) | ~512 MB |
 | **Loki** | Log aggregation (centralized container logs) | ~512 MB |
 | **Promtail** | Log collector (ships Docker logs to Loki) | ~128 MB |
@@ -270,7 +271,7 @@ cp .env.example .env
 ### macOS
 
 - Requires Docker Desktop. The bootstrap script checks for it.
-- Docker Desktop handles UID mapping automatically — no `chown`/`chmod` needed for Grafana, pgAdmin, Prometheus data dirs.
+- Docker Desktop handles UID mapping automatically — no `chown`/`chmod` needed for Grafana, Prometheus data dirs.
 
 ### Linux
 
@@ -279,14 +280,16 @@ cp .env.example .env
 
 ## Troubleshooting
 
-### pgAdmin4 won't start (email validation error)
+### pgAdmin4 won't start (email validation error) — extended profile only
 
-pgAdmin rejects `.local` TLD in `PGADMIN_DEFAULT_EMAIL`. Use `.dev` or any valid public TLD:
+pgAdmin (extended profile) rejects `.local` TLD in `PGADMIN_DEFAULT_EMAIL`. Use `.dev` or any valid public TLD:
 
 ```
 PGADMIN_EMAIL=admin@ailab.dev    # works
 PGADMIN_EMAIL=admin@ailab.local  # rejected
 ```
+
+> **Recommended:** Use [DBeaver Community](https://dbeaver.io/download/) on Mac instead of running pgAdmin4 on your server.
 
 ### cAdvisor / Node Exporter dashboard shows "No data" in Grafana
 

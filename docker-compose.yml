@@ -1,10 +1,10 @@
 # =============================================================================
 # AI Platform — Docker Compose Stack
 # =============================================================================
-# Core: 10 containers (PostgreSQL, Kafka, Redis, Prometheus, Grafana,
-#        Kafka UI, pgAdmin4, RedisInsight, node-exporter, cAdvisor)
-# Extended: 5 containers gated behind --profile extended
-#           (MinIO, Loki, Promtail, Portainer, Traefik)
+# Core: 9 containers (PostgreSQL, Kafka, Redis, Prometheus, Grafana,
+#        Kafka UI, RedisInsight, node-exporter, cAdvisor)
+# Extended: 6 containers gated behind --profile extended
+#           (pgAdmin4, MinIO, Loki, Promtail, Portainer, Traefik)
 #
 # Usage:
 #   Core only:    docker compose up -d
@@ -226,29 +226,6 @@ services:
         limits:
           memory: ${KAFKA_UI_MEMORY_LIMIT:-512M}
 
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-ai-lab}-pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@ailab.dev}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
-      PGADMIN_CONFIG_SERVER_MODE: "False"
-      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
-    ports:
-      - "${PGADMIN_PORT:-5050}:80"
-    volumes:
-      - ./data/pgadmin:/var/lib/pgadmin
-    networks:
-      - ai-platform
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: ${PGADMIN_MEMORY_LIMIT:-512M}
-
   redisinsight:
     image: redis/redisinsight:latest
     container_name: ${COMPOSE_PROJECT_NAME:-ai-lab}-redisinsight
@@ -271,6 +248,30 @@ services:
   # EXTENDED PROFILE — activate with: docker compose --profile extended up -d
   # Requires ≥ 32 GB RAM for comfortable headroom alongside the core stack.
   # ---------------------------------------------------------------------------
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-ai-lab}-pgadmin
+    profiles: [extended]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@ailab.dev}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - ./data/pgadmin:/var/lib/pgadmin
+    networks:
+      - ai-platform
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: ${PGADMIN_MEMORY_LIMIT:-512M}
 
   minio:
     image: minio/minio:latest
