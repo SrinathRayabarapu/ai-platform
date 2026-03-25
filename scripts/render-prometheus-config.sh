@@ -24,6 +24,9 @@ if [ -z "$TARGET" ] && [ -n "${DEV_MACHINE_IP:-}" ]; then
     TARGET="${DEV_MACHINE_IP}:${SPRING_ACTUATOR_PORT:-8081}"
 fi
 if [ -z "$TARGET" ]; then
+    # Linux: host.docker.internal often missing DNS unless extra_hosts is set; and it never
+    # reaches a Spring Boot app running on another host (e.g. Mac). Prefer DEV_MACHINE_IP in .env.
+    echo "render-prometheus-config: WARNING: DEV_MACHINE_IP and AI_SERVICES_SCRAPE_TARGET unset; defaulting to host.docker.internal:8081 (wrong if the app runs on another machine)." >&2
     TARGET="host.docker.internal:8081"
 fi
 

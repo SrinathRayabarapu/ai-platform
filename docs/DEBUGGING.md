@@ -55,17 +55,22 @@ docker compose up -d
 
 **Symptom:** Prometheus UI → Status → Targets → `ai-services` is down.
 
+**Symptom (Grafana):** dashboards such as **AI Token Usage** show **No data** for `ai_*` metrics even though the app runs — Prometheus is not scraping `/actuator/prometheus`.
+
 **Causes:**
 
 1. Spring Boot not running or not on `management.server.port` (default in repo assumption: **8081**).
 2. Wrong host: metrics must be reachable **from inside the Prometheus container**.
-   - Same machine as Docker: use `host.docker.internal:8081` (Linux needs `extra_hosts: host-gateway` — already in `docker-compose.yml`).
-   - App on another machine (e.g. Mac on Tailscale): set in `.env`:
+   - **App on another machine (typical: Mac runs Spring Boot, Dell runs Docker):** you **must** scrape the dev machine’s **Tailscale (or LAN) IP:8081**, **not** `host.docker.internal`. The latter resolves to the **Docker host** (Dell/WSL), not the Mac; on Linux it may also fail with `lookup host.docker.internal: no such host` if `extra_hosts` was never added (e.g. hand-rolled compose).
+   - Set in `.env`:
      - `DEV_MACHINE_IP=100.x.x.x` and `SPRING_ACTUATOR_PORT=8081`, **or**
      - `AI_SERVICES_SCRAPE_TARGET=100.x.x.x:8081`
    - Then run: `./scripts/render-prometheus-config.sh` and `docker compose restart prometheus`.
+   - Same machine as Docker: `host.docker.internal:8081` can work **only** if Spring Boot listens on the host and the Prometheus service has `extra_hosts: host.docker.internal:host-gateway` (already in this repo’s `docker-compose.yml`).
 
 3. Actuator not exposed: ensure `management.endpoints.web.exposure.include` includes `prometheus` and app binds `0.0.0.0` for that port if needed.
+
+4. **macOS firewall** blocking inbound 8081 from Tailscale — Dell cannot scrape until the port is allowed (test: `curl` from Dell/WSL to `http://<mac-tailscale-ip>:8081/actuator/prometheus`).
 
 ### Kafka container stays `starting` or `unhealthy`
 

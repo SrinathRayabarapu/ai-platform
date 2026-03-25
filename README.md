@@ -295,6 +295,10 @@ PGADMIN_EMAIL=admin@ailab.local  # rejected
 
 Community dashboards (IDs 1860, 14282) use placeholder datasource variables (`${DS_PROMETHEUS}`) that aren't resolved on import. Fix: edit each panel/variable and set the datasource to "Prometheus" (the auto-provisioned source). The bundled `ai-lab-overview.json` dashboard avoids this issue entirely.
 
+### AI Token Usage dashboard shows "No data"
+
+That dashboard queries Micrometer metrics (`ai_tokens_*`, `ai_requests_*`). They only exist in Prometheus if the **`ai-services` scrape target** reaches your Spring Boot app’s `/actuator/prometheus`. If the app runs on your **Mac** and Prometheus runs on **another machine** (e.g. Dell), the target must be the Mac’s **Tailscale IP:8081** — not `host.docker.internal` (that points at the Docker host). Set `DEV_MACHINE_IP` (or `AI_SERVICES_SCRAPE_TARGET`) in `.env`, run `./scripts/render-prometheus-config.sh`, then `docker compose restart prometheus`. Confirm **Status → Targets** in Prometheus shows `ai-services` **UP**. Details: [docs/DEBUGGING.md](docs/DEBUGGING.md).
+
 ### Grafana password reset
 
 If you change the password via UI and forget it:

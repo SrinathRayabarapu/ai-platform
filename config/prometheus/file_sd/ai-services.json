@@ -1,6 +1,6 @@
 [
   {
-    "targets": ["host.docker.internal:8081"],
+    "targets": ["100.111.29.42:8081"],
     "labels": {
       "env": "ai-lab"
     }
